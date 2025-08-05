@@ -19,16 +19,18 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
 console.log('🚦 CORS allowed origin:', FRONTEND_URL);
 
-// Add multiple allowed origins for development
+// ✅ Add all allowed origins
 const allowedOrigins = [
   'http://localhost:3000',
-  'http://127.0.0.1:3000'
+  'http://127.0.0.1:3000',
+  'https://job-seeker-1-60ec.onrender.com', // ✅ Deployed frontend URL
+  FRONTEND_URL
 ];
 
-// Socket.IO server
+// Socket.IO setup
 const io = new Server(server, {
   cors: {
-    origin: FRONTEND_URL,
+    origin: allowedOrigins,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
   },
@@ -37,22 +39,15 @@ const io = new Server(server, {
 // Security middleware
 app.use(helmet({ contentSecurityPolicy: false }));
 
-// ✅ Correct CORS setup
+// ✅ CORS middleware
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    // Check if origin is in allowed origins
-    if (allowedOrigins.indexOf(origin) !== -1) {
+    if (!origin) return callback(null, true); // Allow non-browser tools
+
+    if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-    
-    // For production, also allow the configured FRONTEND_URL
-    if (origin === FRONTEND_URL) {
-      return callback(null, true);
-    }
-    
+
     console.log('❌ CORS blocked origin:', origin);
     return callback(new Error('❌ Not allowed by CORS'));
   },
@@ -61,17 +56,18 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token'],
 }));
 
+// Body parsers
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100, // limit each IP to 100 requests per windowMs
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
 });
 app.use('/api/', limiter);
 
-// Serve static files
+// Static files
 app.use('/uploads', express.static('uploads'));
 app.use('/static', express.static('public'));
 
@@ -87,7 +83,7 @@ mongoose.connect(process.env.MONGODB_URI, {
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
-// Add other routes as needed
+// Add more routes as needed
 
 // Socket.IO handlers
 io.on('connection', (socket) => {
@@ -96,7 +92,7 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => console.log('🔴 Socket disconnected:', socket.id));
 });
 
-// Frontend in production
+// Production frontend serve
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../frontend/dist')));
   app.get('*', (req, res) => {
